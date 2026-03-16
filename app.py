@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import sys
 import tempfile
+import traceback
 from pathlib import Path
 
 import streamlit as st
@@ -38,6 +39,10 @@ from rag_app.pipeline import RAGPipeline, RAGResponse
 from rag_app.ingestion import ingest_file
 from rag_app.vector_store import VectorStore
 from rag_app.config import TOP_K_RESULTS, SIMILARITY_THRESHOLD
+from rag_app.logger import get_logger
+
+
+log = get_logger("streamlit_ui")
 
 
 # ── Page config ───────────────────────────────────────────────────────────────
@@ -58,6 +63,9 @@ def _init_state() -> None:
     if "chat_history" not in st.session_state:
         # list of {"role": "user"|"assistant", "content": str, "response": RAGResponse|None}
         st.session_state.chat_history = []
+    if "ingest_errors" not in st.session_state:
+        # Persist ingestion errors across reruns so users can copy them.
+        st.session_state.ingest_errors = []
 
 
 _init_state()
@@ -85,6 +93,7 @@ with st.sidebar:
             store: VectorStore = pipeline._store
             progress = st.progress(0, text="Ingesting…")
             total_chunks = 0
+            ingest_errors: list[dict] = []
             for i, uf in enumerate(uploaded_files):
                 suffix = Path(uf.name).suffix
                 with tempfile.NamedTemporaryFile(
@@ -97,13 +106,54 @@ with st.sidebar:
                     total_chunks += n
                     st.toast(f"✅ {uf.name} → {n} chunks", icon="📄")
                 except Exception as exc:
+                    tb = traceback.format_exc()
+                    log.exception("Ingestion failed for '%s': %s", uf.name, exc)
+                    ingest_errors.append(
+                        {
+                            "file": uf.name,
+                            "error": str(exc),
+                            "traceback": tb,
+                        }
+                    )
                     st.toast(f"❌ {uf.name}: {exc}", icon="⚠️")
                 finally:
                     Path(tmp_path).unlink(missing_ok=True)
                 progress.progress((i + 1) / len(uploaded_files))
             progress.empty()
-            st.success(f"Ingested {total_chunks} total chunks from {len(uploaded_files)} file(s).")
+
+            if ingest_errors:
+                st.session_state.ingest_errors = ingest_errors
+                st.error(
+                    f"Ingestion completed with {len(ingest_errors)} error(s). "
+                    "Expand details below."
+                )
+                with st.expander("Ingestion errors", expanded=True):
+                    for e in ingest_errors:
+                        st.markdown(f"**File:** {e['file']}")
+                        st.markdown(f"**Error:** {e['error']}")
+                        st.code(e["traceback"], language="text")
+                        st.divider()
+                st.caption("Tip: errors are saved for this session in the sidebar section below.")
+            else:
+                st.session_state.ingest_errors = []
+                st.success(
+                    f"Ingested {total_chunks} total chunks from {len(uploaded_files)} file(s)."
+                )
+                st.rerun()
+
+    # Persistent error display (survives reruns)
+    if st.session_state.ingest_errors:
+        st.divider()
+        st.subheader("⚠️ Last ingestion errors")
+        if st.button("Clear", use_container_width=True):
+            st.session_state.ingest_errors = []
             st.rerun()
+        with st.expander("Show details", expanded=False):
+            for e in st.session_state.ingest_errors:
+                st.markdown(f"**File:** {e.get('file','')}")
+                st.markdown(f"**Error:** {e.get('error','')}")
+                st.code(e.get("traceback", ""), language="text")
+                st.divider()
 
     st.divider()
 

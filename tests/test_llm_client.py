@@ -58,8 +58,8 @@ def test_out_of_range_citation_flagged():
 
 @pytest.fixture
 def mock_llm_client(monkeypatch):
-    with patch("rag_app.llm_client.ChatOpenAI") as MockChat:
-        instance = MockChat.return_value
+    with patch("rag_app.llm_client.LLMClient._build_llm") as mock_build:
+        instance = MagicMock()
         ai_msg = MagicMock()
         ai_msg.content = "Self-attention captures dependencies [Doc 1, p.3]."
         ai_msg.usage_metadata = {
@@ -68,6 +68,7 @@ def mock_llm_client(monkeypatch):
             "total_tokens": 150,
         }
         instance.invoke.return_value = ai_msg
+        mock_build.return_value = instance
         yield LLMClient()
 
 
@@ -93,14 +94,15 @@ def test_generate_token_usage(mock_llm_client):
 
 
 def test_generate_refusal(monkeypatch):
-    with patch("rag_app.llm_client.ChatOpenAI") as MockChat:
-        instance = MockChat.return_value
+    with patch("rag_app.llm_client.LLMClient._build_llm") as mock_build:
+        instance = MagicMock()
         ai_msg = MagicMock()
         ai_msg.content = (
             "I cannot answer this question based on the provided documents."
         )
         ai_msg.usage_metadata = {}
         instance.invoke.return_value = ai_msg
+        mock_build.return_value = instance
         client = LLMClient()
         resp = client.generate([{"role": "user", "content": "capital?"}], [])
         assert resp.is_refused is True

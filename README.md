@@ -10,7 +10,7 @@ A production-ready **Retrieval-Augmented Generation** system that answers questi
 User Query
    │
    ▼
-[1] Embedder           cached SHA-256 disk cache → OpenAI Embeddings API
+[1] Embedder           cached SHA-256 disk cache → local sentence-transformers
    │
    ▼
 [2] Vector Store       ChromaDB persistent collection (cosine similarity)
@@ -23,7 +23,7 @@ User Query
    │                     Layer 4 — Retrieved document context
    │                     Layer 5 — User query + format constraints
    ▼
-[4] LLM Client         LangChain ChatOpenAI (temp=0) + post-gen grounding check
+[4] LLM Client         LangChain ChatGroq/ChatOpenAI (provider switch) + grounding check
    │
    ▼
 [5] Citation Mapper    [Doc N, p.X] → source file, page, section, snippet
@@ -98,7 +98,10 @@ pip install -r requirements.txt
 
 ```bash
 cp .env.example .env
-# Edit .env and set your OPENAI_API_KEY
+# Edit .env and set:
+#   LLM_PROVIDER=groq  + GROQ_API_KEY
+#   OR
+#   LLM_PROVIDER=openai + OPENAI_API_KEY
 ```
 
 ### 4. Ingest documents
@@ -159,9 +162,11 @@ All values can be overridden via `.env`:
 
 | Variable | Default | Description |
 |---|---|---|
-| `OPENAI_API_KEY` | — | Required |
-| `EMBEDDING_MODEL` | `text-embedding-3-small` | OpenAI embedding model |
-| `LLM_MODEL` | `gpt-4o-mini` | OpenAI chat model |
+| `LLM_PROVIDER` | `groq` | `groq` or `openai` |
+| `GROQ_API_KEY` | — | Required when `LLM_PROVIDER=groq` |
+| `OPENAI_API_KEY` | — | Required when `LLM_PROVIDER=openai` |
+| `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Local sentence-transformers embedding model |
+| `LLM_MODEL` | `llama-3.3-70b-versatile` | Chat model name for selected provider |
 | `CHUNK_SIZE` | `800` | Characters per chunk |
 | `CHUNK_OVERLAP` | `100` | Overlap between chunks |
 | `TOP_K_RESULTS` | `5` | Chunks retrieved per query |

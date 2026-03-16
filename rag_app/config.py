@@ -20,9 +20,12 @@ for _d in (DOCS_DIR, CHROMA_DIR, CACHE_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # ── API / Models ──────────────────────────────────────────────────────────────
+LLM_PROVIDER     = os.getenv("LLM_PROVIDER", "groq").strip().lower()   # groq | openai
+GROQ_API_KEY     = os.getenv("GROQ_API_KEY", "")
 OPENAI_API_KEY   = os.getenv("OPENAI_API_KEY", "")
-EMBEDDING_MODEL  = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
-LLM_MODEL        = os.getenv("LLM_MODEL",       "gpt-4o-mini")
+
+EMBEDDING_MODEL  = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")   # local sentence-transformers model
+LLM_MODEL        = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
 
 # ── Retrieval ─────────────────────────────────────────────────────────────────
 TOP_K_RESULTS         = int(os.getenv("TOP_K_RESULTS",         "5"))

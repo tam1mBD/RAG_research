@@ -3,7 +3,8 @@ llm_client.py — LangChain-powered LLM client with post-generation grounding ch
 
 Responsibilities
 ----------------
-1. Send assembled prompt messages to the LLM via LangChain's ChatOpenAI.
+1. Send assembled prompt messages to the configured LLM backend.
+    Supported providers: Groq, OpenAI.
 2. Post-validate the response:
    - Detect the refusal phrase → mark as refused, skip further checks.
    - Check that at least one [Doc N, ...] citation is present.
@@ -24,10 +25,21 @@ import re
 from dataclasses import dataclass, field
 from typing import List
 
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
+try:
+    from langchain_groq import ChatGroq
+except Exception:  # pragma: no cover
+    ChatGroq = None  # type: ignore[assignment]
+
+try:
+    from langchain_openai import ChatOpenAI
+except Exception:  # pragma: no cover
+    ChatOpenAI = None  # type: ignore[assignment]
+
 from rag_app.config import (
+    LLM_PROVIDER,
+    GROQ_API_KEY,
     OPENAI_API_KEY,
     LLM_MODEL,
     MAX_RESPONSE_TOKENS,
@@ -149,7 +161,8 @@ def _to_langchain_messages(messages: List[dict]):
 
 class LLMClient:
     """
-    Wraps LangChain's ChatOpenAI with post-generation grounding validation.
+    Wraps a provider-selectable LangChain chat model with post-generation
+    grounding validation.
 
     Usage
     -----
@@ -160,13 +173,48 @@ class LLMClient:
     """
 
     def __init__(self) -> None:
-        self._llm = ChatOpenAI(
-            model=LLM_MODEL,
-            api_key=OPENAI_API_KEY,
-            max_tokens=MAX_RESPONSE_TOKENS,
-            temperature=0.0,       # deterministic — critical for grounding
+        self._provider = LLM_PROVIDER
+        self._llm = self._build_llm()
+        log.info(
+            "LLMClient initialised (provider=%s, model=%s, temp=0.0).",
+            self._provider,
+            LLM_MODEL,
         )
-        log.info("LLMClient initialised (model=%s, temp=0.0).", LLM_MODEL)
+
+    def _build_llm(self):
+        if self._provider == "groq":
+            if ChatGroq is None:
+                raise RuntimeError(
+                    "Groq provider selected but langchain_groq is not installed. "
+                    "Install with: pip install langchain-groq"
+                )
+            if not GROQ_API_KEY:
+                raise RuntimeError("GROQ_API_KEY is required when LLM_PROVIDER=groq")
+            return ChatGroq(
+                model=LLM_MODEL,
+                api_key=GROQ_API_KEY,
+                max_tokens=MAX_RESPONSE_TOKENS,
+                temperature=0.0,
+            )
+
+        if self._provider == "openai":
+            if ChatOpenAI is None:
+                raise RuntimeError(
+                    "OpenAI provider selected but langchain_openai is not installed. "
+                    "Install with: pip install langchain-openai"
+                )
+            if not OPENAI_API_KEY:
+                raise RuntimeError("OPENAI_API_KEY is required when LLM_PROVIDER=openai")
+            return ChatOpenAI(
+                model=LLM_MODEL,
+                api_key=OPENAI_API_KEY,
+                max_tokens=MAX_RESPONSE_TOKENS,
+                temperature=0.0,
+            )
+
+        raise ValueError(
+            f"Unsupported LLM_PROVIDER='{self._provider}'. Use 'groq' or 'openai'."
+        )
 
     def generate(
         self,
